@@ -13,6 +13,7 @@
 #include <sensor_msgs/Imu.h>
 #include <nav_msgs/Odometry.h>
 #include <geometry_msgs/Twist.h>
+#include <std_msgs/UInt8MultiArray.h>
 #include <tf/transform_broadcaster.h>
 #include <visualization_msgs/Marker.h>
 #include <cv_bridge/cv_bridge.h>
@@ -28,6 +29,7 @@
 #define DEBUG_ODOMETRY 0
 #define DEBUG_ACCELEROMETER 0
 #define DEBUG_SPEED_RECEIVED 0
+#define DEBUG_LED_RECEIVED 0
 #define DEBUG_CAMERA_INIT 0
 
 #define READ_TIMEOUT_SEC 10    // 10 seconds, keep it high to avoid desynchronize when there are communication delays due to Bluetooth.
@@ -59,12 +61,14 @@
 #define MOT_STEP_DIST (WHEEL_CIRCUMFERENCE/1000.0)      // Distance for each motor step (meters); a complete turn is 1000 steps (0.000125 meters per step (m/steps)).
 #define ROBOT_RADIUS 0.035 // meters.
 
+#define LED_NUMBER 10 // total number of LEDs on the robot (0-7=leds, 8=body, 9=front) 
+
 char pcToRobotBuff[10]; 
 char robotToPcBuff[255];
 bool enabledSensors[SENSORS_NUM];
 bool changedActuators[ACTUATORS_NUM];
 int speedLeft = 0, speedRight = 0;
-unsigned char ledNum = 0, ledState = 0;
+unsigned char ledState[LED_NUMBER] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 int stepsLeft = 0, stepsRight = 0;
 int rfcommSock;
 int sock;
@@ -103,7 +107,7 @@ visualization_msgs::Marker microphoneMsg;
 ros::Publisher floorPublisher;
 visualization_msgs::Marker floorMsg;
 
-ros::Subscriber cmdVelSubscriber;
+ros::Subscriber cmdVelSubscriber, cmdLedSubscriber;
 
 double leftStepsDiff = 0, rightStepsDiff = 0;
 double leftStepsPrev = 0, rightStepsPrev = 0;
@@ -319,7 +323,7 @@ void closeConnection() {
 
 void updateActuators() {
     
-    char buff[6];
+    char buff[36]; // 6 (initial size) + 3*LED_NUM (=10)
 
     if(changedActuators[MOTORS]) {
         changedActuators[MOTORS] = false;
@@ -333,12 +337,17 @@ void updateActuators() {
     }
     
     if(changedActuators[LEDS]) {
+        unsigned char i, pos = 0;
+
+        //[-L][LED_NUM][STATE]    set led state: led number (0-7=leds, 8=body, 9=front), state (0=0ff, 1=on, 2=inverse)
         changedActuators[LEDS] = false;
-        buff[0] = -'L';
-        buff[1] = ledNum;
-        buff[2] = ledState;
-        buff[3] = 0;
-        write(rfcommSock, buff, 4);
+        for (i = 0; i < LED_NUMBER; i++) {
+            buff[pos++] = -'L';
+            buff[pos++] = i;
+            buff[pos++] = ledState[i];
+        }
+        buff[pos] = 0;
+        write(rfcommSock, buff, pos + 1);
     }
     
     if(changedActuators[MOTORS_POS]) {
@@ -1069,6 +1078,19 @@ void handlerVelocity(const geometry_msgs::Twist::ConstPtr& msg) {
     
 }
 
+void handlerLED(const std_msgs::UInt8MultiArray::ConstPtr& msg) {
+    // Controls the state of each LED on the standard robot
+    for (int i = 0; i < LED_NUMBER; i++)
+        ledState[i] = msg->data[i];
+    changedActuators[LEDS] = true;
+
+    if(DEBUG_LED_RECEIVED) {
+        std::cout << "[" << epuckname << "] " << "new LED status: " << std::endl;
+        for (int i = 0; i < LED_NUMBER; i++)
+            std::cout << ledState[i] << ", ";
+    }
+}
+
 int main(int argc,char *argv[]) {
   
    int robotId = 0;   
@@ -1279,6 +1301,7 @@ int main(int argc,char *argv[]) {
     * away the oldest ones.
     */
     cmdVelSubscriber = n.subscribe("mobile_base/cmd_vel", 10, handlerVelocity);
+    cmdLedSubscriber = n.subscribe("mobile_base/cmd_led", 10, handlerLED);
 
     if(enabledSensors[CAMERA]) {
         imageSize = camWidth*camHeight*(camMode+1)+3; // The image data header contains "mode", "width", "height" in the first 3 bytes.
