@@ -147,8 +147,11 @@ int16_t gyroValue[3];
 int32_t gyroSum[3] = {0, 0, 0};
 int16_t gyroOffset[3] = {0, 0, 0};
 
+bool debug_enabled = false;
+uint8_t debug_count = 0;
+
 int initConnectionWithRobot(void) {
-	fh = open("/dev/i2c-1", O_RDWR);	// open the I2C dev driver for bus 3
+	fh = open("/dev/i2c-3", O_RDWR);	// open the I2C dev driver for bus 3
 	return 0;
 }
 
@@ -381,6 +384,16 @@ void updateSensorsData() {
 		if(DEBUG_UPDATE_SENSORS_DATA)std::cout << "[" << epuckname << "] " << "acc: " << accValue[0] << "," << accValue[1] << "," << accValue[2] << std::endl;
 		if(DEBUG_UPDATE_SENSORS_DATA)std::cout << "[" << epuckname << "] " << "gyro: " << gyroValue[0] << "," << gyroValue[1] << "," << gyroValue[2] << std::endl;		
 	}	
+	
+	if(debug_enabled) {
+		debug_count++;
+		if(debug_count == 50) {
+			debug_count = 0;
+			std::cout << "[" << epuckname << "] " << "prox: " << proxData[0] << "," << proxData[1] << "," << proxData[2] << "," << proxData[3] << "," << proxData[4] << "," << proxData[5] << "," << proxData[6] << "," << proxData[7] << std::endl;
+			std::cout << "[" << epuckname << "] " << "mic: " << micData[0] << "," << micData[1] << "," << micData[2] << std::endl;
+			std::cout << "[" << epuckname << "] " << "position: " << motorPositionData[0] << "," << motorPositionData[1] << std::endl;
+		}
+	}
 	
 }
 
@@ -969,8 +982,9 @@ int main(int argc,char *argv[]) {
     np.param("proximity", enabledSensors[PROXIMITY], false);
     np.param("motor_position", enabledSensors[MOTOR_POSITION], false);
     np.param("microphone", enabledSensors[MICROPHONE], false);
-    //np.param("ros_rate", rosRate, 7);    
-
+    np.param("ros_rate", rosRate, 20);    
+	np.param("debug", debug_enabled, false);
+	
     if(DEBUG_ROS_PARAMS) {
         std::cout << "[" << epuckname << "] " << "epuck name: " << epuckname << std::endl;
         std::cout << "[" << epuckname << "] " << "init pose: " << init_xpos << ", " << init_ypos << ", " << theta << std::endl;
@@ -980,7 +994,8 @@ int main(int argc,char *argv[]) {
         std::cout << "[" << epuckname << "] " << "proximity enabled: " << enabledSensors[PROXIMITY] << std::endl;
         std::cout << "[" << epuckname << "] " << "motor position enabled: " << enabledSensors[MOTOR_POSITION] << std::endl;
         std::cout << "[" << epuckname << "] " << "microphone enabled: " << enabledSensors[MICROPHONE] << std::endl;
-        //std::cout << "[" << epuckname << "] " << "ros rate: " << rosRate << std::endl;
+        std::cout << "[" << epuckname << "] " << "ros rate: " << rosRate << std::endl;
+		std::cout << "[" << epuckname << "] " << "debug enabled: " << debug_enabled << std::endl;
     }
     
 
@@ -1066,14 +1081,14 @@ int main(int argc,char *argv[]) {
     xPos = init_xpos;
     yPos = init_ypos;
 
-    //ros::Rate loop_rate(rosRate);
+    ros::Rate loop_rate(rosRate);
    
     while (ros::ok()) {
         updateSensorsData();
         updateRosInfo();
         updateActuators();
         ros::spinOnce();
-        //loop_rate.sleep();    // Do not call "sleep" otherwise the bluetooth communication will hang.
+        loop_rate.sleep();    // Do not call "sleep" otherwise the bluetooth communication will hang.
                                 // We communicate as fast as possible, this shouldn't be a problem...
         if(consecutiveReadTimeout >= MAX_CONSECUTIVE_TIMEOUT) { // We have connection problems, stop here.
             break;
