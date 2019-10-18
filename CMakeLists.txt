@@ -102,11 +102,11 @@ include_directories(
 
 ## Declare a cpp library
 # add_library(epuck_driver_cpp
-#   src/${PROJECT_NAME}/epuck_driver_cpp.cpp
+#   src/${PROJECT_NAME}/epuck2_driver_cpp.cpp
 # )
 
 ## Declare a cpp executable
-add_executable(epuck_driver_cpp src/epuck_driver_cpp.cpp)
+add_executable(epuck_driver_cpp src/epuck2_driver_cpp.cpp)
 
 ## Add cmake target dependencies of the executable/library
 ## as an example, message headers may need to be generated before nodes
@@ -156,7 +156,7 @@ target_link_libraries(epuck_driver_cpp bluetooth ${catkin_LIBRARIES} ${OpenCV_LI
 #############
 
 ## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_epuck_driver_cpp.cpp)
+# catkin_add_gtest(${PROJECT_NAME}-test test/test_epuck2_driver_cpp.cpp)
 # if(TARGET ${PROJECT_NAME}-test)
 #   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
 # endif()

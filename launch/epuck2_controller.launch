@@ -1,8 +1,8 @@
 <launch>
 
-    <arg name="epuck_id"/>
-    <arg name="epuck_address" default="10:00:E8:C5:61:C9"/>
-    <arg name="epuck_name" default="epuck_robot_0"/>
+    <arg name="epuck2_id" default="0"/>
+    <arg name="epuck2_address" default="10:00:E8:C5:61:C9"/>
+    <arg name="epuck2_name" default="epuck2_robot_0"/>
     <arg name="is_single_robot" default="1" />
     <arg name="xpos" default="0.0"/>
     <arg name="ypos" default="0.0"/>
@@ -17,12 +17,13 @@
     <!-- The floor sensors decrease the refresh rate because the floor values are read (through I2C) when the request is received -->
     <!-- so we need to wait the read process terminates before receiving the values.-->
     <arg name="cam_en" default="false"/> <!-- When the camera is enabled you'll experience lower refresh rate (about 2.5 Hz)-->
-    <arg name="acc_en" default="true"/>
+    <arg name="imu_en" default="true"/>
     <arg name="prox_en" default="true"/>
     <arg name="mot_pos_en" default="true"/>
     <arg name="floor_en" default="false"/>
     <arg name="mot_speed_en" default="true"/>
-    <arg name="mic_en" default="true"/>    
+    <arg name="mic_en" default="true"/>
+	<arg name="dist_sens_en" default="true"/>
     <!-- Camera parameters: if you put -1 then a default value will be assigned. -->
     <!-- Remember that the maximum buffer that the e-puck can handle is 3200 bytes. -->
     <arg name="cam_width" default="-1" /> <!-- By default width = 160 -->
@@ -33,20 +34,21 @@
     <arg name="cam_y_offset" default="-1" />     
     <!-- <arg name="ros_rate" default="20" /> --> <!-- This feature is disable since causes connection stability problems. -->
     
-    <node pkg="epuck_driver_cpp" type="epuck_driver_cpp" name="$(arg epuck_name)" output="screen">
-        <param name="epuck_id" value="$(arg epuck_id)"/>
-        <param name="epuck_address" value="$(arg epuck_address)"/>
-        <param name="epuck_name" value="$(arg epuck_name)"/>
+    <node pkg="epuck_driver_cpp" type="epuck_driver_cpp" name="$(arg epuck2_name)" output="screen">
+        <param name="epuck2_id" value="$(arg epuck2_id)"/>
+        <param name="epuck2_address" value="$(arg epuck2_address)"/>
+        <param name="epuck2_name" value="$(arg epuck2_name)"/>
         <param name="xpos" value="$(arg xpos)"/>
-	<param name="ypos" value="$(arg ypos)"/>
-	<param name="theta" value="$(arg theta)"/> 
+		<param name="ypos" value="$(arg ypos)"/>
+		<param name="theta" value="$(arg theta)"/> 
         <param name="camera" value="$(arg cam_en)"/>
-        <param name="accelerometer" value="$(arg acc_en)"/>
+        <param name="imu" value="$(arg imu_en)"/>
         <param name="proximity" value="$(arg prox_en)"/>
         <param name="motor_position" value="$(arg mot_pos_en)"/>
         <param name="floor" value="$(arg floor_en)"/>
         <param name="motor_speed" value="$(arg mot_speed_en)"/>
-	<param name="microphone" value="$(arg mic_en)"/> 
+		<param name="microphone" value="$(arg mic_en)"/> 
+		<param name="distance_sensor" value="$(arg dist_sens_en)"/>
         <param name="cam_width" value="$(arg cam_width)"/>
         <param name="cam_height" value="$(arg cam_height)"/>
         <param name="cam_zoom" value="$(arg cam_zoom)"/>
@@ -58,13 +60,13 @@
     
     <param name="robot_description" textfile="$(find epuck_driver_cpp)/urdf/epuck_urdf.xml"/>
     <node name="epuck_state_publisher" pkg="robot_state_publisher" type="state_publisher">
-        <param name="tf_prefix" value="$(arg epuck_name)" />
+        <param name="tf_prefix" value="$(arg epuck2_name)" />
     </node>
 
-    <node if="$(arg is_single_robot)" pkg="rviz" type="rviz" output="screen" name="rviz" args="-d $(find epuck_driver_cpp)/config/single_epuck_driver_rviz.rviz"/>
+    <node if="$(arg is_single_robot)" pkg="rviz" type="rviz" output="screen" name="rviz" args="-d $(find epuck_driver_cpp)/config/single_epuck2_driver_rviz.rviz"/>
 
     <node pkg="gmapping" type="slam_gmapping" name="slam_gmapping" output="screen" >
-        <param name="base_frame" value="$(arg epuck_name)/base_link"/>
+        <param name="base_frame" value="$(arg epuck2_name)/base_link"/>
         
         <param name="map_update_interval" value="1.0"/>
         

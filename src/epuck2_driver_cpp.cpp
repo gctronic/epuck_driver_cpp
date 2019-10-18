@@ -27,28 +27,31 @@
 #define DEBUG_UPDATE_SENSORS_DATA 0
 #define DEBUG_COMMUNICATION_ERROR 1
 #define DEBUG_ODOMETRY 0
-#define DEBUG_ACCELEROMETER 0
+#define DEBUG_IMU 0
 #define DEBUG_SPEED_RECEIVED 0
 #define DEBUG_LED_RECEIVED 0
 #define DEBUG_CAMERA_INIT 0
+#define DEBUG_RGB_RECEIVED 0
 
 #define READ_TIMEOUT_SEC 10    // 10 seconds, keep it high to avoid desynchronize when there are communication delays due to Bluetooth.
 #define READ_TIMEOUT_USEC 0
 #define MAX_CONSECUTIVE_TIMEOUT 3
 
-#define SENSORS_NUM 7
-#define ACCELEROMETER 0
+#define SENSORS_NUM 8
+#define IMU 0
 #define MOTOR_SPEED 1
 #define FLOOR 2
 #define PROXIMITY 3
 #define MOTOR_POSITION 4
 #define MICROPHONE 5
 #define CAMERA 6
+#define DIST_SENSOR 7
 
-#define ACTUATORS_NUM 3
+#define ACTUATORS_NUM 4
 #define MOTORS 0
 #define LEDS 1
 #define MOTORS_POS 2
+#define RGB_LEDS 3
 
 #define CAM_MAX_BUFFER_SIZE 3203
 #define CAM_MODE_GRAY 0
@@ -61,14 +64,20 @@
 #define MOT_STEP_DIST (WHEEL_CIRCUMFERENCE/1000.0)      // Distance for each motor step (meters); a complete turn is 1000 steps (0.000125 meters per step (m/steps)).
 #define ROBOT_RADIUS 0.035 // meters.
 
-#define LED_NUMBER 10 // total number of LEDs on the robot (0-7=leds, 8=body, 9=front) 
+#define LED_NUMBER 6 // total number of LEDs on the robot (0,2,4,6=leds, 8=body, 9=front) 
+#define RGB_LED_NUMBER 4
 
-char pcToRobotBuff[10]; 
+#define DEG2RAD(deg) (deg / 180 * M_PI)
+#define GYRO_RAW2DPS (250.0/32768.0f)   //250DPS (degrees per second) scale for int16 raw value
+#define STANDARD_GRAVITY 9.80665f
+
+char pcToRobotBuff[11]; 
 char robotToPcBuff[255];
 bool enabledSensors[SENSORS_NUM];
 bool changedActuators[ACTUATORS_NUM];
 int speedLeft = 0, speedRight = 0;
-unsigned char ledState[LED_NUMBER] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+unsigned char ledState[LED_NUMBER] = {0, 0, 0, 0, 0, 0};
+unsigned char rgbLedState[RGB_LED_NUMBER*3] = {0};
 int stepsLeft = 0, stepsRight = 0;
 int rfcommSock;
 int sock;
@@ -82,14 +91,17 @@ int consecutiveReadTimeout = 0;
 int camWidth, camHeight, camZoom, camMode, camXoffset, camYoffset;
 
 int accData[3];
+int gyroData[3];
 int motorSpeedData[2];
 int floorData[5];
 int proxData[8];
 int motorPositionData[2];
-int micData[3];
+int micData[4];
 unsigned char *camData;
 bool newImageReceived = false;
 int imageSize = 0;
+int distSensData = 0;
+int16_t gyroOffset[3] = {0, 0, 0}; // Used if making an initial calibration of the gyro.
 
 ros::Publisher proxPublisher[8];
 sensor_msgs::Range proxMsg[8];
@@ -98,16 +110,18 @@ sensor_msgs::LaserScan laserMsg;
 ros::Publisher odomPublisher;
 nav_msgs::Odometry odomMsg;
 ros::Publisher imagePublisher;
-ros::Publisher accelPublisher;
-sensor_msgs::Imu accelMsg;
+ros::Publisher imuPublisher;
+sensor_msgs::Imu imuMsg;
 ros::Publisher motorSpeedPublisher;
 visualization_msgs::Marker motorSpeedMsg;
 ros::Publisher microphonePublisher;
 visualization_msgs::Marker microphoneMsg;
 ros::Publisher floorPublisher;
 visualization_msgs::Marker floorMsg;
+ros::Publisher distSensPublisher;
+sensor_msgs::Range distSensMsg;
 
-ros::Subscriber cmdVelSubscriber, cmdLedSubscriber;
+ros::Subscriber cmdVelSubscriber, cmdLedSubscriber, cmdRgbLedsSubscriber;
 
 double leftStepsDiff = 0, rightStepsDiff = 0;
 double leftStepsPrev = 0, rightStepsPrev = 0;
@@ -235,7 +249,7 @@ int initConnectionWithRobotId(int robotId) {
                     // set the connection parameters (who to connect to)
                     struct sockaddr_rc addr;
                     addr.rc_family = AF_BLUETOOTH;
-                    addr.rc_channel = (uint8_t) 1;
+                    addr.rc_channel = (uint8_t) 2;
                     addr.rc_bdaddr = (info+i)->bdaddr;
                    
                     // allocate a socket
@@ -282,7 +296,7 @@ int initConnectionWithRobotAddress(const char *address) {
     std::stringstream ss;
     struct sockaddr_rc addr;    // set the connection parameters (who to connect to)
     addr.rc_family = AF_BLUETOOTH;
-    addr.rc_channel = (uint8_t) 1;
+    addr.rc_channel = (uint8_t) 2;
     str2ba(address, &addr.rc_bdaddr);
                
     // allocate a socket
@@ -339,13 +353,26 @@ void updateActuators() {
     if(changedActuators[LEDS]) {
         unsigned char i, pos = 0;
 
-        //[-L][LED_NUM][STATE]    set led state: led number (0-7=leds, 8=body, 9=front), state (0=0ff, 1=on, 2=inverse)
+        //[-L][LED_NUM][STATE]    set led state: led number (0,2,4,6=leds, 8=body, 9=front), state (0=0ff, 1=on, 2=inverse)
         changedActuators[LEDS] = false;
-        for (i = 0; i < LED_NUMBER; i++) {
-            buff[pos++] = -'L';
-            buff[pos++] = i;
-            buff[pos++] = ledState[i];
-        }
+		buff[pos++] = -'L';
+		buff[pos++] = 0;
+		buff[pos++] = ledState[0];
+		buff[pos++] = -'L';
+		buff[pos++] = 2;
+		buff[pos++] = ledState[1];
+		buff[pos++] = -'L';
+		buff[pos++] = 4;
+		buff[pos++] = ledState[2];
+		buff[pos++] = -'L';
+		buff[pos++] = 6;
+		buff[pos++] = ledState[3];
+		buff[pos++] = -'L';
+		buff[pos++] = 8;
+		buff[pos++] = ledState[4];
+		buff[pos++] = -'L';
+		buff[pos++] = 9;
+		buff[pos++] = ledState[5];
         buff[pos] = 0;
         write(rfcommSock, buff, pos + 1);
     }
@@ -361,6 +388,22 @@ void updateActuators() {
         write(rfcommSock, buff, 6);
     }
 
+    if(changedActuators[RGB_LEDS]) {
+        unsigned char i, pos = 0;
+
+        //[-0x0A][R2][G2][B2][R4][G4][B4][R6][G6][B6][R8][G8][B8]
+		// set rgb led state: R,G,B for all 4 leds
+        changedActuators[RGB_LEDS] = false;
+		buff[pos++] = -0x0A;
+        for (i = 0; i < RGB_LED_NUMBER; i++) {            
+            buff[pos++] = rgbLedState[i*3]; //R
+            buff[pos++] = rgbLedState[i*3+1]; //G
+			buff[pos++] = rgbLedState[i*3+2]; //B
+        }
+        buff[pos] = 0;
+        write(rfcommSock, buff, pos + 1);
+    }	
+	
 }
 
 void updateSensorsData() {
@@ -402,12 +445,17 @@ void updateSensorsData() {
         if(DEBUG_UPDATE_SENSORS_TIMING)gettimeofday(&currentTime3, NULL);
         if(DEBUG_UPDATE_SENSORS_TIMING)std::cout << "[" << epuckname << "] " << "sensors tot read time " << double((currentTime3.tv_sec*1000000 + currentTime3.tv_usec)-(lastTime3.tv_sec*1000000 + lastTime3.tv_usec))/1000000.0 << " sec" << std::endl;                
         bufIndex = 0;                        
-        if(enabledSensors[ACCELEROMETER]) {
+        if(enabledSensors[IMU]) {
             accData[0] = (unsigned char)robotToPcBuff[bufIndex] | robotToPcBuff[bufIndex+1]<<8;
             accData[1] = (unsigned char)robotToPcBuff[bufIndex+2] | robotToPcBuff[bufIndex+3]<<8;
             accData[2] = (unsigned char)robotToPcBuff[bufIndex+4] | robotToPcBuff[bufIndex+5]<<8;
             bufIndex += 6;
+            gyroData[0] = (unsigned char)robotToPcBuff[bufIndex] | robotToPcBuff[bufIndex+1]<<8;
+            gyroData[1] = (unsigned char)robotToPcBuff[bufIndex+2] | robotToPcBuff[bufIndex+3]<<8;
+            gyroData[2] = (unsigned char)robotToPcBuff[bufIndex+4] | robotToPcBuff[bufIndex+5]<<8;
+            bufIndex += 6;
             if(DEBUG_UPDATE_SENSORS_DATA)std::cout << "[" << epuckname << "] " << "acc: " << accData[0] << "," << accData[1] << "," << accData[2] << std::endl;
+			if(DEBUG_UPDATE_SENSORS_DATA)std::cout << "[" << epuckname << "] " << "gyro: " << gyroData[0] << "," << gyroData[1] << "," << gyroData[2] << std::endl;
         }
         if(enabledSensors[MOTOR_SPEED]) {
             motorSpeedData[0] = (unsigned char)robotToPcBuff[bufIndex] | robotToPcBuff[bufIndex+1]<<8;
@@ -446,9 +494,15 @@ void updateSensorsData() {
             micData[0] = (unsigned char)robotToPcBuff[bufIndex] | robotToPcBuff[bufIndex+1]<<8;
             micData[1] = (unsigned char)robotToPcBuff[bufIndex+2] | robotToPcBuff[bufIndex+3]<<8;
             micData[2] = (unsigned char)robotToPcBuff[bufIndex+4] | robotToPcBuff[bufIndex+5]<<8;
-            bufIndex += 6;
-            if(DEBUG_UPDATE_SENSORS_DATA)std::cout << "[" << epuckname << "] " << "mic: " << micData[0] << "," << micData[1] << "," << micData[2] << std::endl;
-        }            
+			micData[3] = (unsigned char)robotToPcBuff[bufIndex+6] | robotToPcBuff[bufIndex+7]<<8;
+            bufIndex += 8;
+            if(DEBUG_UPDATE_SENSORS_DATA)std::cout << "[" << epuckname << "] " << "mic: " << micData[0] << "," << micData[1] << "," << micData[2] << "," << micData[3] << std::endl;
+        }
+        if(enabledSensors[DIST_SENSOR]) {
+            distSensData = (unsigned char)robotToPcBuff[bufIndex] | robotToPcBuff[bufIndex+1]<<8;
+            bufIndex += 2;
+            if(DEBUG_UPDATE_SENSORS_DATA)std::cout << "[" << epuckname << "] " << "dist sens: " << distSensData << std::endl;
+        }
     } else {
         if(DEBUG_UPDATE_SENSORS_DATA)std::cout << "[" << epuckname << "] " << "discard the sensors data" << std::endl;
     }
@@ -929,49 +983,49 @@ void updateRosInfo() {
         br.sendTransform(odomTrans);
     }
     
-    if(enabledSensors[ACCELEROMETER]) {
+    if(enabledSensors[IMU]) {
         std::stringstream ss;
         ss << epuckname << "/base_link";
-        accelMsg.header.frame_id = ss.str();
-        accelMsg.header.stamp = ros::Time::now();            
-        accelMsg.linear_acceleration.x = (accData[1]-2048.0)/800.0*9.81; // 1 g = about 800, then transforms in m/s^2.
-        accelMsg.linear_acceleration.y = (accData[0]-2048.0)/800.0*9.81;
-        accelMsg.linear_acceleration.z = (accData[2]-2048.0)/800.0*9.81;
-        accelMsg.linear_acceleration_covariance[0] = 0.01;
-        accelMsg.linear_acceleration_covariance[1] = 0.0;
-        accelMsg.linear_acceleration_covariance[2] = 0.0;
-        accelMsg.linear_acceleration_covariance[3] = 0.0;
-        accelMsg.linear_acceleration_covariance[4] = 0.01;
-        accelMsg.linear_acceleration_covariance[5] = 0.0;
-        accelMsg.linear_acceleration_covariance[6] = 0.0;
-        accelMsg.linear_acceleration_covariance[7] = 0.0;
-        accelMsg.linear_acceleration_covariance[8] = 0.01;
-        if(DEBUG_ACCELEROMETER)std::cout << "[" << epuckname << "] " << "accel raw: " << accData[0] << ", " << accData[1] << ", " << accData[2] << std::endl;
-        if(DEBUG_ACCELEROMETER)std::cout << "[" << epuckname << "] " << "accel (m/s2): " << ((accData[0]-2048.0)/800.0*9.81) << ", " << ((accData[1]-2048.0)/800.0*9.81) << ", " << ((accData[2]-2048.0)/800.0*9.81) << std::endl;
-        accelMsg.angular_velocity.x = 0;
-        accelMsg.angular_velocity.y = 0;
-        accelMsg.angular_velocity.z = 0;
-        accelMsg.angular_velocity_covariance[0] = 0.01;
-        accelMsg.angular_velocity_covariance[1] = 0.0;
-        accelMsg.angular_velocity_covariance[2] = 0.0;
-        accelMsg.angular_velocity_covariance[3] = 0.0;
-        accelMsg.angular_velocity_covariance[4] = 0.01;
-        accelMsg.angular_velocity_covariance[5] = 0.0;
-        accelMsg.angular_velocity_covariance[6] = 0.0;
-        accelMsg.angular_velocity_covariance[7] = 0.0;
-        accelMsg.angular_velocity_covariance[8] = 0.01;
+        imuMsg.header.frame_id = ss.str();
+        imuMsg.header.stamp = ros::Time::now();            
+        imuMsg.linear_acceleration.x = (accData[1]-2048.0)/800.0*STANDARD_GRAVITY; // 1 g = about 800, then transforms in m/s^2.
+        imuMsg.linear_acceleration.y = (accData[0]-2048.0)/800.0*STANDARD_GRAVITY;
+        imuMsg.linear_acceleration.z = (accData[2]-2048.0)/800.0*STANDARD_GRAVITY;
+        imuMsg.linear_acceleration_covariance[0] = 0.01;
+        imuMsg.linear_acceleration_covariance[1] = 0.0;
+        imuMsg.linear_acceleration_covariance[2] = 0.0;
+        imuMsg.linear_acceleration_covariance[3] = 0.0;
+        imuMsg.linear_acceleration_covariance[4] = 0.01;
+        imuMsg.linear_acceleration_covariance[5] = 0.0;
+        imuMsg.linear_acceleration_covariance[6] = 0.0;
+        imuMsg.linear_acceleration_covariance[7] = 0.0;
+        imuMsg.linear_acceleration_covariance[8] = 0.01;
+        if(DEBUG_IMU)std::cout << "[" << epuckname << "] " << "accel raw: " << accData[0] << ", " << accData[1] << ", " << accData[2] << std::endl;
+        if(DEBUG_IMU)std::cout << "[" << epuckname << "] " << "accel (m/s2): " << ((accData[0]-2048.0)/800.0*STANDARD_GRAVITY) << ", " << ((accData[1]-2048.0)/800.0*STANDARD_GRAVITY) << ", " << ((accData[2]-2048.0)/800.0*STANDARD_GRAVITY) << std::endl;
+        imuMsg.angular_velocity.x = (gyroData[0] - gyroOffset[0]) * DEG2RAD(GYRO_RAW2DPS); // rad/s
+        imuMsg.angular_velocity.y = (gyroData[1] - gyroOffset[1]) * DEG2RAD(GYRO_RAW2DPS);
+        imuMsg.angular_velocity.z = (gyroData[2] - gyroOffset[2]) * DEG2RAD(GYRO_RAW2DPS);
+        imuMsg.angular_velocity_covariance[0] = 0.01;
+        imuMsg.angular_velocity_covariance[1] = 0.0;
+        imuMsg.angular_velocity_covariance[2] = 0.0;
+        imuMsg.angular_velocity_covariance[3] = 0.0;
+        imuMsg.angular_velocity_covariance[4] = 0.01;
+        imuMsg.angular_velocity_covariance[5] = 0.0;
+        imuMsg.angular_velocity_covariance[6] = 0.0;
+        imuMsg.angular_velocity_covariance[7] = 0.0;
+        imuMsg.angular_velocity_covariance[8] = 0.01;
         geometry_msgs::Quaternion odomQuat = tf::createQuaternionMsgFromYaw(0);
-        accelMsg.orientation = odomQuat;
-        accelMsg.orientation_covariance[0] = 0.01;
-        accelMsg.orientation_covariance[1] = 0.0;
-        accelMsg.orientation_covariance[2] = 0.0;
-        accelMsg.orientation_covariance[3] = 0.0;
-        accelMsg.orientation_covariance[4] = 0.01;
-        accelMsg.orientation_covariance[5] = 0.0;
-        accelMsg.orientation_covariance[6] = 0.0;
-        accelMsg.orientation_covariance[7] = 0.0;
-        accelMsg.orientation_covariance[8] = 0.01;
-        accelPublisher.publish(accelMsg);
+        imuMsg.orientation = odomQuat;
+        imuMsg.orientation_covariance[0] = 0.01;
+        imuMsg.orientation_covariance[1] = 0.0;
+        imuMsg.orientation_covariance[2] = 0.0;
+        imuMsg.orientation_covariance[3] = 0.0;
+        imuMsg.orientation_covariance[4] = 0.01;
+        imuMsg.orientation_covariance[5] = 0.0;
+        imuMsg.orientation_covariance[6] = 0.0;
+        imuMsg.orientation_covariance[7] = 0.0;
+        imuMsg.orientation_covariance[8] = 0.01;
+        imuPublisher.publish(imuMsg);
     }
     if(enabledSensors[MOTOR_SPEED]) {
         std::stringstream ss;
@@ -1034,7 +1088,7 @@ void updateRosInfo() {
         microphoneMsg.color.g = 1.0;
         microphoneMsg.color.b = 1.0;
         ss.str("");
-        ss << "mic: [" << micData[0] << ", " << micData[1] << ", " << micData[2] << "]";
+        ss << "mic: [" << micData[0] << ", " << micData[1] << ", " << micData[2] << ", " << micData[3] << "]";
         microphoneMsg.text = ss.str();
         microphonePublisher.publish(microphoneMsg);
     }
@@ -1057,6 +1111,31 @@ void updateRosInfo() {
             out_msg.image = rgb888;
             imagePublisher.publish(out_msg.toImageMsg());
         }
+    }
+
+    if(enabledSensors[DIST_SENSOR]) {
+
+		distSensMsg.range = distSensData/1000.0;
+		if(distSensMsg.range > distSensMsg.max_range) {
+			distSensMsg.range = distSensMsg.max_range;
+		}
+		if(distSensMsg.range < distSensMsg.min_range) {
+			distSensMsg.range = distSensMsg.min_range;
+		}
+		distSensMsg.header.stamp = ros::Time::now();
+		distSensPublisher.publish(distSensMsg);
+
+        std::stringstream parent;
+        std::stringstream child;
+        tf::Transform transform;
+        tf::Quaternion q;
+        
+        transform.setOrigin( tf::Vector3(0.035, 0.0, 0.034) );        
+        q.setRPY(0, -0.21, 0.0);
+        transform.setRotation(q);        
+        parent << epuckname << "/base_dist_sens";
+        child << epuckname << "/base_link";
+        br.sendTransform(tf::StampedTransform(transform, ros::Time::now(), child.str(), parent.str()));
     }
 }
 
@@ -1091,6 +1170,24 @@ void handlerLED(const std_msgs::UInt8MultiArray::ConstPtr& msg) {
     }
 }
 
+void handlerRgbLeds(const std_msgs::UInt8MultiArray::ConstPtr& msg) {
+    // Controls the state of each LED on the standard robot
+    for (int i = 0; i < RGB_LED_NUMBER; i++) {
+        rgbLedState[i*3] = msg->data[i*3];
+		rgbLedState[i*3+1] = msg->data[i*3+1];
+		rgbLedState[i*3+2] = msg->data[i*3+2];
+		
+	}
+    changedActuators[RGB_LEDS] = true;
+
+    if(DEBUG_RGB_RECEIVED) {
+        std::cout << "[" << epuckname << "] " << "new RGB status: " << std::endl;
+        for (int i = 0; i < RGB_LED_NUMBER; i++) {
+            std::cout << i << ": " << rgbLedState[i*3] << ", " << rgbLedState[i*3+1] << ", " << rgbLedState[i*3+2];
+		}
+    }
+}
+
 int main(int argc,char *argv[]) {
   
    int robotId = 0;   
@@ -1120,13 +1217,13 @@ int main(int argc,char *argv[]) {
     ros::NodeHandle np("~"); // Private.
     ros::NodeHandle n; // Public.
     
-    np.getParam("epuck_id", robotId);
-    np.param<std::string>("epuck_address", epuckAddress, "");
-    np.param<std::string>("epuck_name", epuckname, "epuck");
+    np.getParam("epuck2_id", robotId);
+    np.param<std::string>("epuck2_address", epuckAddress, "");
+    np.param<std::string>("epuck2_name", epuckname, "epuck2");
     np.param("xpos", init_xpos, 0.0);
     np.param("ypos", init_ypos, 0.0);
     np.param("theta", init_theta, 0.0);
-    np.param("accelerometer", enabledSensors[ACCELEROMETER], false);
+    np.param("imu", enabledSensors[IMU], false);
     np.param("motor_speed", enabledSensors[MOTOR_SPEED], false);
     np.param("floor", enabledSensors[FLOOR], false);
     np.param("proximity", enabledSensors[PROXIMITY], false);
@@ -1139,6 +1236,7 @@ int main(int argc,char *argv[]) {
     np.param("cam_mode", camMode, 0);
     np.param("cam_x_offset", camXoffset, 240);
     np.param("cam_y_offset", camYoffset, 239);
+	np.param("distance_sensor", enabledSensors[DIST_SENSOR], false);
     //np.param("ros_rate", rosRate, 7);    
     
     if(camWidth < 0 || camWidth > 640) {
@@ -1175,7 +1273,7 @@ int main(int argc,char *argv[]) {
         std::cout << "[" << epuckname << "] " << "epuck address: " << epuckAddress << std::endl;
         std::cout << "[" << epuckname << "] " << "epuck name: " << epuckname << std::endl;
         std::cout << "[" << epuckname << "] " << "init pose: " << init_xpos << ", " << init_ypos << ", " << theta << std::endl;
-        std::cout << "[" << epuckname << "] " << "accelerometer enabled: " << enabledSensors[ACCELEROMETER] << std::endl;
+        std::cout << "[" << epuckname << "] " << "imu enabled: " << enabledSensors[IMU] << std::endl;
         std::cout << "[" << epuckname << "] " << "motor speed enabled: " << enabledSensors[MOTOR_SPEED] << std::endl;
         std::cout << "[" << epuckname << "] " << "floor enabled: " << enabledSensors[FLOOR] << std::endl;
         std::cout << "[" << epuckname << "] " << "proximity enabled: " << enabledSensors[PROXIMITY] << std::endl;
@@ -1187,6 +1285,7 @@ int main(int argc,char *argv[]) {
         std::cout << "[" << epuckname << "] " << "image zoom: " << camZoom << std::endl;
         std::cout << "[" << epuckname << "] " << "image mode: " << (camMode?"RGB":"GRAY") << std::endl;
         std::cout << "[" << epuckname << "] " << "image offset: " << camXoffset << ", " << camYoffset << std::endl;
+		std::cout << "[" << epuckname << "] " << "dist sensor enabled: " << enabledSensors[DIST_SENSOR] << std::endl;
     }
     
     if(epuckAddress.compare("")==0) {   // Search the robot id
@@ -1201,13 +1300,16 @@ int main(int argc,char *argv[]) {
     
     bufIndex = 0;
     bytesToReceive = 0;
-    if(enabledSensors[ACCELEROMETER]) {
-        //if(DEBUG)std::cout << "acc enabled" << std::endl;
+    if(enabledSensors[IMU]) {
+        //if(DEBUG)std::cout << "imu enabled" << std::endl;
         pcToRobotBuff[bufIndex] = -'a';
         bufIndex++;
+		bytesToReceive += 6;
+		pcToRobotBuff[bufIndex] = -'g';
+		bufIndex++;
         bytesToReceive += 6;
         
-        accelPublisher = n.advertise<sensor_msgs::Imu>("accel", 10);
+        imuPublisher = n.advertise<sensor_msgs::Imu>("imu", 10);
     }
     if(enabledSensors[MOTOR_SPEED]) {
         pcToRobotBuff[bufIndex] = -'E';
@@ -1272,11 +1374,26 @@ int main(int argc,char *argv[]) {
         lastTime = ros::Time::now();        
     }
     if(enabledSensors[MICROPHONE]) {
-        pcToRobotBuff[bufIndex] = -'u';
+        pcToRobotBuff[bufIndex] = -0x0C;
         bufIndex++;
-        bytesToReceive += 6;
+        bytesToReceive += 8;
 
         microphonePublisher = n.advertise<visualization_msgs::Marker>("microphone", 10);
+    }
+    if(enabledSensors[DIST_SENSOR]) {
+        pcToRobotBuff[bufIndex] = -0x0D;
+        bufIndex++;
+        bytesToReceive += 2;
+
+		distSensPublisher = n.advertise<sensor_msgs::Range>("dist_sens", 10);
+		distSensMsg.radiation_type = sensor_msgs::Range::INFRARED;
+		std::stringstream ss;
+		ss.str("");
+		ss << epuckname << "/base_dist_sens";
+		distSensMsg.header.frame_id =  ss.str();
+		distSensMsg.field_of_view = 0.43;	// About 25 degrees (+/- 12.5)
+		distSensMsg.min_range = 0.005;		// 5 mm.
+		distSensMsg.max_range = 2;			// 2 m. 
     }
     if(bufIndex == 0) {
         std::cerr << "[" << epuckname << "] " << "No sensors enabled!" << std::endl;
@@ -1302,6 +1419,7 @@ int main(int argc,char *argv[]) {
     */
     cmdVelSubscriber = n.subscribe("mobile_base/cmd_vel", 10, handlerVelocity);
     cmdLedSubscriber = n.subscribe("mobile_base/cmd_led", 10, handlerLED);
+	cmdRgbLedsSubscriber = n.subscribe("mobile_base/rgb_leds", 10, handlerRgbLeds);
 
     if(enabledSensors[CAMERA]) {
         imageSize = camWidth*camHeight*(camMode+1)+3; // The image data header contains "mode", "width", "height" in the first 3 bytes.
@@ -1366,6 +1484,7 @@ int main(int argc,char *argv[]) {
     }
     
 }
+
 
 
 
