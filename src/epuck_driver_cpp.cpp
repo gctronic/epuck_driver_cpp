@@ -23,7 +23,7 @@ extern "C" {
 	#include <sys/stat.h>
 	#include <fcntl.h>
 	#include <linux/i2c-dev.h> /* for I2C_SLAVE */
-	#include <linux/i2c.h>
+	//#include <linux/i2c.h>
 	#include <sys/ioctl.h>
 	#include <stdlib.h>
 	#include <unistd.h>
@@ -151,7 +151,7 @@ bool debug_enabled = false;
 uint8_t debug_count = 0;
 
 int initConnectionWithRobot(void) {
-	fh = open("/dev/i2c-3", O_RDWR);	// open the I2C dev driver for bus 3
+	fh = open("/dev/i2c-4", O_RDWR);	// open the I2C dev driver for bus 4
 	return 0;
 }
 
