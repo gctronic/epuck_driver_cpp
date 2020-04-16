@@ -5,7 +5,7 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /Odometry1/Shape1
-        - /Imu1/Acceleration properties1
+        - /Odometry1/Covariance1
       Splitter Ratio: 0.639118016
     Tree Height: 336
   - Class: rviz/Selection
@@ -197,7 +197,7 @@ Visualization Manager:
           Color: 204; 51; 204
           Scale: 1
           Value: true
-        Value: true
+        Value: false
       Enabled: true
       Keep: 100
       Name: Odometry
@@ -244,14 +244,6 @@ Visualization Manager:
       Name: Floor
       Namespaces:
         {}
-      Queue Size: 1
-      Value: true
-    - Class: rviz/Marker
-      Enabled: true
-      Marker Topic: /motor_speed
-      Name: Speed
-      Namespaces:
-        "": true
       Queue Size: 1
       Value: true
     - Class: rviz/Marker
@@ -324,6 +316,14 @@ Visualization Manager:
       Topic: /dist_sens
       Unreliable: false
       Value: true
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /mag_field_vector
+      Name: MagneticField
+      Namespaces:
+        "": true
+      Queue Size: 100
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -349,25 +349,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/XYOrbit
-      Distance: 0.555778086
+      Distance: 0.865584314
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.0599999987
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 0.0719061717
-        Y: 0.0373980105
-        Z: 1.14362706e-07
+        X: -0.00287549943
+        Y: 0.0507122874
+        Z: 8.45603836e-08
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.0500000007
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.00999999978
-      Pitch: 0.489797592
+      Pitch: 0.714797795
       Target Frame: base_link
       Value: XYOrbit (rviz)
-      Yaw: 1.59539998
+      Yaw: 1.7203995
     Saved: ~
 Window Geometry:
   Displays:
@@ -389,5 +389,5 @@ Window Geometry:
   Views:
     collapsed: false
   Width: 1535
-  X: 65
-  Y: 24
+  X: 226
+  Y: 61

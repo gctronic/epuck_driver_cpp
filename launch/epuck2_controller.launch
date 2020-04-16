@@ -1,37 +1,14 @@
 <launch>
 
     <arg name="epuck2_id" default="0"/>
-    <arg name="epuck2_address" default="10:00:E8:C5:61:C9"/>
+    <arg name="epuck2_address" default="192.168.1.1"/>
     <arg name="epuck2_name" default="epuck2_robot_0"/>
     <arg name="is_single_robot" default="1" />
     <arg name="xpos" default="0.0"/>
     <arg name="ypos" default="0.0"/>
     <arg name="theta" default="0.0"/>
-    <!-- Sensor enabling/disabling:-->
-    <!-- with all the sensors enabled you'll get a refresh rate of about 2.5 Hz -->
-    <!-- with all the sensors apart from the floor you'll get a refresh rate of about 2.5 Hz -->
-    <!-- with all the sensors apart from the camera yuo'll get a refresh rate of about about 3.3 Hz -->
-    <!-- with all the sensors without floor and without the camera you'll get a refresh rate of about 30 Hz -->
-    <!-- The camera decreases the refresh rate because we need to wait that the capture is finished (the capture is started when -->
-    <!-- the request is received by the robot); moreover there are more bytes to be actually transfered.-->
-    <!-- The floor sensors decrease the refresh rate because the floor values are read (through I2C) when the request is received -->
-    <!-- so we need to wait the read process terminates before receiving the values.-->
-    <arg name="cam_en" default="false"/> <!-- When the camera is enabled you'll experience lower refresh rate (about 2.5 Hz)-->
-    <arg name="imu_en" default="true"/>
-    <arg name="prox_en" default="true"/>
-    <arg name="mot_pos_en" default="true"/>
-    <arg name="floor_en" default="false"/>
-    <arg name="mot_speed_en" default="true"/>
-    <arg name="mic_en" default="true"/>
-	<arg name="dist_sens_en" default="true"/>
-    <!-- Camera parameters: if you put -1 then a default value will be assigned. -->
-    <!-- Remember that the maximum buffer that the e-puck can handle is 3200 bytes. -->
-    <arg name="cam_width" default="-1" /> <!-- By default width = 160 -->
-    <arg name="cam_height" default="-1" />  <!-- By default height = 2 -->
-    <arg name="cam_zoom" default="-1" /> <!-- Can be 1 (default), 2, 4, 8 -->
-    <arg name="cam_mode" default="-1" /> <!-- 0=gray (default), 1=rgb565 -->
-    <arg name="cam_x_offset" default="-1" />  <!-- By default the slice will be centered. -->
-    <arg name="cam_y_offset" default="-1" />     
+    <arg name="cam_en" default="false"/> <!-- When the camera is enabled you'll experience lower refresh rate -->
+    <arg name="floor_en" default="false"/>  
     <!-- <arg name="ros_rate" default="20" /> --> <!-- This feature is disable since causes connection stability problems. -->
     
     <node pkg="epuck_driver_cpp" type="epuck_driver_cpp" name="$(arg epuck2_name)" output="screen">
@@ -42,19 +19,7 @@
 		<param name="ypos" value="$(arg ypos)"/>
 		<param name="theta" value="$(arg theta)"/> 
         <param name="camera" value="$(arg cam_en)"/>
-        <param name="imu" value="$(arg imu_en)"/>
-        <param name="proximity" value="$(arg prox_en)"/>
-        <param name="motor_position" value="$(arg mot_pos_en)"/>
         <param name="floor" value="$(arg floor_en)"/>
-        <param name="motor_speed" value="$(arg mot_speed_en)"/>
-		<param name="microphone" value="$(arg mic_en)"/> 
-		<param name="distance_sensor" value="$(arg dist_sens_en)"/>
-        <param name="cam_width" value="$(arg cam_width)"/>
-        <param name="cam_height" value="$(arg cam_height)"/>
-        <param name="cam_zoom" value="$(arg cam_zoom)"/>
-        <param name="cam_mode" value="$(arg cam_mode)"/>
-        <param name="cam_x_offset" value="$(arg cam_x_offset)"/>
-        <param name="cam_y_offset" value="$(arg cam_y_offset)"/>   
         <!--<param name="ros_rate" value="$(arg ros_rate)"/> -->
     </node>
     
