@@ -85,7 +85,7 @@ float magneticField[3];
 uint8_t temperature;
 int proxData[8]; /**< proximity sensors data*/
 int lightAvg;										/**< light sensor data*/
-uint16_t distanceCm;
+uint16_t distanceMm;
 uint16_t micVolume[4];								/**< microphone data*/
 int16_t motorSteps[2];
 uint16_t batteryRaw;
@@ -416,11 +416,11 @@ void updateSensorsAndActuators() {
 				if(DEBUG_UPDATE_SENSORS_DATA)std::cout << "[" << epuckname << "] " << "lightAvg: " << lightAvg << std::endl;
 				
 				// ToF
-				distanceCm = (uint16_t)(((uint8_t)sensor[70]<<8)|((uint8_t)sensor[69]))/10;
-				if(distanceCm > 200) {
-					distanceCm = 200;
+				distanceMm = (uint16_t)((uint8_t)sensor[70]<<8)|((uint8_t)sensor[69]);
+				if(distanceMm > 2000) {
+					distanceMm = 2000;
 				}
-				if(DEBUG_UPDATE_SENSORS_DATA)std::cout << "[" << epuckname << "] " << "distanceCm: " << distanceCm << "(" << (int)sensor[69] << "," << (int)sensor[70] << ")" << std::endl;
+				if(DEBUG_UPDATE_SENSORS_DATA)std::cout << "[" << epuckname << "] " << "distanceMm: " << distanceMm << "(" << (int)sensor[69] << "," << (int)sensor[70] << ")" << std::endl;
 
 				// Microphone
 				micVolume[0] = ((uint8_t)sensor[71]+(uint8_t)sensor[72]*256);
@@ -1038,7 +1038,7 @@ void updateRosInfo() {
 	
 	//#############################################################################################################################################	
 	// Time of flight topic
-	distSensMsg.range = (float)distanceCm/1000.0;
+	distSensMsg.range = (float)distanceMm/1000.0;
 	if(distSensMsg.range > distSensMsg.max_range) {
 		distSensMsg.range = distSensMsg.max_range;
 	}
