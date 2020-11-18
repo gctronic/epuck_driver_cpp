@@ -24,7 +24,7 @@
     </node>
     
     <param name="robot_description" textfile="$(find epuck_driver_cpp)/urdf/epuck_urdf.xml"/>
-    <node name="epuck_state_publisher" pkg="robot_state_publisher" type="state_publisher">
+    <node name="epuck_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher">
         <param name="tf_prefix" value="$(arg epuck2_name)" />
     </node>
 
