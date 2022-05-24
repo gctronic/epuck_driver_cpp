@@ -39,6 +39,9 @@ extern "C" {
 #define DEBUG_SPEED_RECEIVED 0
 #define DEBUG_LED_RECEIVED 0
 
+#define I2C_CHANNEL "/dev/i2c-12"
+#define LEGACY_I2C_CHANNEL "/dev/i2c-4"
+
 #define READ_TIMEOUT_SEC 10    // 10 seconds, keep it high to avoid desynchronize when there are communication delays due to Bluetooth.
 #define READ_TIMEOUT_USEC 0
 #define MAX_CONSECUTIVE_TIMEOUT 3
@@ -151,7 +154,14 @@ bool debug_enabled = false;
 uint8_t debug_count = 0;
 
 int initConnectionWithRobot(void) {
-	fh = open("/dev/i2c-4", O_RDWR);	// open the I2C dev driver for bus 4
+	fh = open(I2C_CHANNEL, O_RDWR);
+	if(fh < 0) { // Try with bus number used in older kernel
+		fh = open(LEGACY_I2C_CHANNEL, O_RDWR);	
+		if(fh < 0) {
+			perror("Cannot open I2C device");
+			return -1;
+		}
+	}
 	return 0;
 }
 
@@ -1084,6 +1094,7 @@ int main(int argc,char *argv[]) {
     ros::Rate loop_rate(rosRate);
    
     while (ros::ok()) {
+		blabla;
         updateSensorsData();
         updateRosInfo();
         updateActuators();
