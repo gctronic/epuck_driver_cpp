@@ -74,8 +74,9 @@ extern "C" {
 #define LEDS_NUM 4 		// Number of LEDs on the robot.
 #define RGB_LEDS_NUM 4	// Number of RGB LEDs on the robot.
 
-#define ACTUATORS_SIZE 19
-#define SENSORS_SIZE 30
+#define ACTUATORS_SIZE (19+1) // Data + checksum.
+#define SENSORS_SIZE (46+1) // Data + checksum.
+#define ROBOT_ADDR 0x1F
 
 #define NUM_SAMPLES_CALIBRATION 20
 #define AK8963_ADDRESS 0x0C		// Address of magnetometer
@@ -154,6 +155,14 @@ bool debug_enabled = false;
 uint8_t debug_count = 0;
 
 int initConnectionWithRobot(void) {
+
+	// Set the I2C timeout to 20 ms (instead of 1 second). This need to be done on the "swticher" bus channel.
+	int fh1 = open("/dev/i2c-1", O_RDWR);
+	if(ioctl(fh1, I2C_TIMEOUT, 2) < 0) {
+		perror("fail to set i2c1 timeout");
+	}		
+	close(fh1);
+
 	fh = open(I2C_CHANNEL, O_RDWR);
 	if(fh < 0) { // Try with bus number used in older kernel
 		fh = open(LEGACY_I2C_CHANNEL, O_RDWR);	
@@ -290,47 +299,69 @@ void calibrateGyro() {
 	printf("gyro offsets: x=%d, y=%d, z=%d (samples=%d)\n", gyroOffset[0], gyroOffset[1], gyroOffset[2], samplesCount);
 }
 
+int update_robot_sensors_and_actuators() {
+	
+    struct i2c_rdwr_ioctl_data packets;
+    struct i2c_msg messages[2];
+	int trials = 0;
+	
+	// S Addr Wr [A] Data(actuators) NA Sr Addr Rd [A] Data(sensors) [A] P
+    messages[0].addr  = ROBOT_ADDR;
+    messages[0].flags = 0;
+    messages[0].len   = ACTUATORS_SIZE;
+    messages[0].buf   = zero_to_epuck_buff;
+	
+    messages[1].addr  = ROBOT_ADDR;
+    messages[1].flags = I2C_M_RD;
+    messages[1].len   = SENSORS_SIZE;
+    messages[1].buf   = epuck_to_zero_buff;
+
+    packets.msgs      = messages;
+    packets.nmsgs     = 2;
+	
+	// Form the tests it was noticed that sometimes (about 1/1000) the communication give a "timeout error" followed by "remote I/O" error.
+	// Thus 3 retrials are done in case of errors.
+	while(trials < 3) {
+		if(ioctl(fh, I2C_RDWR, &packets) < 0) {		
+			trials++;
+			continue;
+		}
+		break;
+	}
+
+	if(trials > 2) {
+		perror("update_robot_sensors_and_actuators: ");
+		return -1;
+	} else {
+		return 0;
+	}
+}
+
 void updateSensorsData() {
 
     struct timeval timeout;
     fd_set readfds;
     int retval;
     unsigned int bytesRead = 0;
+    uint8_t checksum = 0;
+    uint16_t i = 0;
     
     memset(epuck_to_zero_buff, 0x0, SENSORS_SIZE);
-    FD_ZERO(&readfds);
-    FD_SET(fh, &readfds);
-	ioctl(fh, I2C_SLAVE, 0x1F);			// tell the driver we want the device with address 0x1F (7-bits) on the I2C bus	=> main microcontroller.
-    retval = write(fh, zero_to_epuck_buff, ACTUATORS_SIZE);
-	if(retval != ACTUATORS_SIZE) {
-		perror("i2c write error");
-	}	
-    bytesRead = 0;
-    if(DEBUG_UPDATE_SENSORS_TIMING)gettimeofday(&lastTime3, NULL);
-    while(bytesRead < SENSORS_SIZE) {
-        timeout.tv_sec=READ_TIMEOUT_SEC; // The timeout need to be set every time because the "select" may modify it.
-        timeout.tv_usec=READ_TIMEOUT_USEC;                
-	if(DEBUG_UPDATE_SENSORS_TIMING)gettimeofday(&lastTime2, NULL);
-        retval = select(fh+1, &readfds, NULL, NULL, &timeout);
-        if(DEBUG_UPDATE_SENSORS_TIMING)gettimeofday(&currentTime2, NULL);
-        if(DEBUG_UPDATE_SENSORS_TIMING)std::cout << "[" << epuckname << "] " << "sensors data read in " << double((currentTime2.tv_sec*1000000 + currentTime2.tv_usec)-(lastTime2.tv_sec*1000000 + lastTime2.tv_usec))/1000000.0 << " sec" << std::endl;
-        if (retval>0) {
-            int n = read(fh, &epuck_to_zero_buff[bytesRead], SENSORS_SIZE-bytesRead);
-            //if(DEBUG_OTHERS)std::cout << "read " << n << " / " << SENSORS_SIZE << " bytes" << std::endl;
-            bytesRead += n;
-            consecutiveReadTimeout = 0;
-        } else if(retval==0) {
-            if(DEBUG_COMMUNICATION_ERROR)std::cout << "[" << epuckname << "] " << "sensors read timeout" << std::endl;
-            consecutiveReadTimeout++;
-            break;
-        } else {
-            if(DEBUG_COMMUNICATION_ERROR)perror("sensors read error");
-            break;
-        }
+
+    checksum = 0;
+	for(i=0; i<(ACTUATORS_SIZE-1); i++) {
+	    checksum ^= zero_to_epuck_buff[i];
     }
-    if(bytesRead == SENSORS_SIZE) {       
-        if(DEBUG_UPDATE_SENSORS_TIMING)gettimeofday(&currentTime3, NULL);
-        if(DEBUG_UPDATE_SENSORS_TIMING)std::cout << "[" << epuckname << "] " << "sensors tot read time " << double((currentTime3.tv_sec*1000000 + currentTime3.tv_usec)-(lastTime3.tv_sec*1000000 + lastTime3.tv_usec))/1000000.0 << " sec" << std::endl; 
+	zero_to_epuck_buff[ACTUATORS_SIZE-1] = checksum;
+
+    update_robot_sensors_and_actuators();
+
+    // Verify the checksum (Longitudinal Redundancy Check) before interpreting the received sensors data.
+    checksum = 0;
+    for(i=0; i<(SENSORS_SIZE-1); i++) {
+    	checksum ^= epuck_to_zero_buff[i];
+    }
+	if(checksum == epuck_to_zero_buff[SENSORS_SIZE-1]) {
         if(enabledSensors[PROXIMITY]) {
             proxData[0] = (unsigned char)epuck_to_zero_buff[0] | epuck_to_zero_buff[1]<<8;
             proxData[1] = (unsigned char)epuck_to_zero_buff[2] | epuck_to_zero_buff[3]<<8;
@@ -342,41 +373,30 @@ void updateSensorsData() {
             proxData[7] = (unsigned char)epuck_to_zero_buff[14] | epuck_to_zero_buff[15]<<8;
             if(DEBUG_UPDATE_SENSORS_DATA)std::cout << "[" << epuckname << "] " << "prox: " << proxData[0] << "," << proxData[1] << "," << proxData[2] << "," << proxData[3] << "," << proxData[4] << "," << proxData[5] << "," << proxData[6] << "," << proxData[7] << std::endl;
         }
+        // Prox ambient at index 16..31
         if(enabledSensors[MICROPHONE]) {
-            micData[0] = (unsigned char)epuck_to_zero_buff[16] | epuck_to_zero_buff[17]<<8;
-            micData[1] = (unsigned char)epuck_to_zero_buff[18] | epuck_to_zero_buff[19]<<8;
-            micData[2] = (unsigned char)epuck_to_zero_buff[20] | epuck_to_zero_buff[21]<<8;
-			micData[3] = (unsigned char)epuck_to_zero_buff[22] | epuck_to_zero_buff[23]<<8;
+            micData[0] = (unsigned char)epuck_to_zero_buff[32] | epuck_to_zero_buff[33]<<8;
+            micData[1] = (unsigned char)epuck_to_zero_buff[34] | epuck_to_zero_buff[35]<<8;
+            micData[2] = (unsigned char)epuck_to_zero_buff[36] | epuck_to_zero_buff[37]<<8;
+			micData[3] = (unsigned char)epuck_to_zero_buff[38] | epuck_to_zero_buff[39]<<8;
             if(DEBUG_UPDATE_SENSORS_DATA)std::cout << "[" << epuckname << "] " << "mic: " << micData[0] << "," << micData[1] << "," << micData[2] << std::endl;
         }
-		selectorData = epuck_to_zero_buff[24];
+		selectorData = epuck_to_zero_buff[40]&0x0F;
+        // Button at index 40 (4 most significant bits)
         if(enabledSensors[MOTOR_POSITION]) {
-            motorPositionData[0] = (unsigned char)epuck_to_zero_buff[25] | epuck_to_zero_buff[26]<<8;
-            motorPositionData[1] = (unsigned char)epuck_to_zero_buff[27] | epuck_to_zero_buff[28]<<8;
+            motorPositionData[0] = (unsigned char)epuck_to_zero_buff[41] | epuck_to_zero_buff[42]<<8;
+            motorPositionData[1] = (unsigned char)epuck_to_zero_buff[43] | epuck_to_zero_buff[44]<<8;
             if(DEBUG_UPDATE_SENSORS_DATA)std::cout << "[" << epuckname << "] " << "position: " << motorPositionData[0] << "," << motorPositionData[1] << std::endl;
         }  		
-		tvRemoteData = epuck_to_zero_buff[29];
-		
-        // if(enabledSensors[MOTOR_SPEED]) {
-            // motorSpeedData[0] = (unsigned char)epuck_to_zero_buff[bufIndex] | epuck_to_zero_buff[bufIndex+1]<<8;
-            // motorSpeedData[1] = (unsigned char)epuck_to_zero_buff[bufIndex+2] | epuck_to_zero_buff[bufIndex+3]<<8;
-            // bufIndex += 4;
-            // if(DEBUG_UPDATE_SENSORS_DATA)std::cout << "[" << epuckname << "] " << "speed: " << motorSpeedData[0] << "," << motorSpeedData[1] << std::endl;
-        // }
-        // if(enabledSensors[FLOOR]) {
-            // floorData[0] = (unsigned char)epuck_to_zero_buff[bufIndex] | epuck_to_zero_buff[bufIndex+1]<<8;
-            // floorData[1] = (unsigned char)epuck_to_zero_buff[bufIndex+2] | epuck_to_zero_buff[bufIndex+3]<<8;
-            // floorData[2] = (unsigned char)epuck_to_zero_buff[bufIndex+4] | epuck_to_zero_buff[bufIndex+5]<<8;
-            // floorData[3] = (unsigned char)epuck_to_zero_buff[bufIndex+6] | epuck_to_zero_buff[bufIndex+7]<<8;
-            // floorData[4] = (unsigned char)epuck_to_zero_buff[bufIndex+8] | epuck_to_zero_buff[bufIndex+9]<<8;
-            // bufIndex += 10;
-            // if(DEBUG_UPDATE_SENSORS_DATA)std::cout << "[" << epuckname << "] " << "floor: " << floorData[0] << "," << floorData[1] << "," << floorData[2] << "," << floorData[3] << "," << floorData[4] << std::endl;
-        // }
-      
-    } else {
+		tvRemoteData = epuck_to_zero_buff[45];
+	} else {
         if(DEBUG_UPDATE_SENSORS_DATA)std::cout << "[" << epuckname << "] " << "discard the sensors data" << std::endl;
     }
-	
+
+    // if(enabledSensors[FLOOR]) {
+        // floorData[0] = ...
+    // }
+      	
 	if(enabledSensors[IMU]) {
 		ioctl(fh, I2C_SLAVE, imu_addr);
 	
@@ -960,7 +980,7 @@ int main(int argc,char *argv[]) {
    int rosRate = 0;
    int i = 0;
    
-   	zero_to_epuck_buff[4] = 3; // Speaker => 3 = no sound.
+   	zero_to_epuck_buff[4] = 0; // Speaker => 0 = no sound.
    
     /**
     * The ros::init() function needs to see argc and argv so that it can perform
@@ -1094,7 +1114,6 @@ int main(int argc,char *argv[]) {
     ros::Rate loop_rate(rosRate);
    
     while (ros::ok()) {
-		blabla;
         updateSensorsData();
         updateRosInfo();
         updateActuators();
