@@ -1,7 +1,6 @@
 <launch>
 
     <arg name="epuck_id"/>
-    <arg name="epuck_address" default="10:00:E8:C5:61:C9"/>
     <arg name="epuck_name" default="epuck_robot_0"/>
     <arg name="is_single_robot" default="1" />
     <arg name="xpos" default="0.0"/>
@@ -16,43 +15,26 @@
     <!-- the request is received by the robot); moreover there are more bytes to be actually transfered.-->
     <!-- The floor sensors decrease the refresh rate because the floor values are read (through I2C) when the request is received -->
     <!-- so we need to wait the read process terminates before receiving the values.-->
-    <arg name="cam_en" default="false"/> <!-- When the camera is enabled you'll experience lower refresh rate (about 2.5 Hz)-->
-    <arg name="acc_en" default="true"/>
+    <arg name="imu_en" default="true"/>
     <arg name="prox_en" default="true"/>
     <arg name="mot_pos_en" default="true"/>
     <arg name="floor_en" default="false"/>
-    <arg name="mot_speed_en" default="true"/>
-    <arg name="mic_en" default="true"/>    
-    <!-- Camera parameters: if you put -1 then a default value will be assigned. -->
-    <!-- Remember that the maximum buffer that the e-puck can handle is 3200 bytes. -->
-    <arg name="cam_width" default="-1" /> <!-- By default width = 160 -->
-    <arg name="cam_height" default="-1" />  <!-- By default height = 2 -->
-    <arg name="cam_zoom" default="-1" /> <!-- Can be 1 (default), 2, 4, 8 -->
-    <arg name="cam_mode" default="-1" /> <!-- 0=gray (default), 1=rgb565 -->
-    <arg name="cam_x_offset" default="-1" />  <!-- By default the slice will be centered. -->
-    <arg name="cam_y_offset" default="-1" />     
+    <arg name="mot_speed_en" default="false"/>
+    <arg name="mic_en" default="true"/> 
     <!-- <arg name="ros_rate" default="20" /> --> <!-- This feature is disable since causes connection stability problems. -->
     
     <node pkg="epuck_driver_cpp" type="epuck_driver_cpp" name="$(arg epuck_name)" output="screen">
         <param name="epuck_id" value="$(arg epuck_id)"/>
-        <param name="epuck_address" value="$(arg epuck_address)"/>
         <param name="epuck_name" value="$(arg epuck_name)"/>
         <param name="xpos" value="$(arg xpos)"/>
-	<param name="ypos" value="$(arg ypos)"/>
-	<param name="theta" value="$(arg theta)"/> 
-        <param name="camera" value="$(arg cam_en)"/>
-        <param name="accelerometer" value="$(arg acc_en)"/>
+		<param name="ypos" value="$(arg ypos)"/>
+		<param name="theta" value="$(arg theta)"/> 
+        <param name="imu" value="$(arg imu_en)"/>
         <param name="proximity" value="$(arg prox_en)"/>
         <param name="motor_position" value="$(arg mot_pos_en)"/>
         <param name="floor" value="$(arg floor_en)"/>
         <param name="motor_speed" value="$(arg mot_speed_en)"/>
-	<param name="microphone" value="$(arg mic_en)"/> 
-        <param name="cam_width" value="$(arg cam_width)"/>
-        <param name="cam_height" value="$(arg cam_height)"/>
-        <param name="cam_zoom" value="$(arg cam_zoom)"/>
-        <param name="cam_mode" value="$(arg cam_mode)"/>
-        <param name="cam_x_offset" value="$(arg cam_x_offset)"/>
-        <param name="cam_y_offset" value="$(arg cam_y_offset)"/>   
+		<param name="microphone" value="$(arg mic_en)"/> 
         <!--<param name="ros_rate" value="$(arg ros_rate)"/> -->
     </node>
     
@@ -61,7 +43,7 @@
         <param name="tf_prefix" value="$(arg epuck_name)" />
     </node>
 
-    <node if="$(arg is_single_robot)" pkg="rviz" type="rviz" output="screen" name="rviz" args="-d $(find epuck_driver_cpp)/config/single_epuck_driver_rviz.rviz"/>
+    <!--<node if="$(arg is_single_robot)" pkg="rviz" type="rviz" output="screen" name="rviz" args="-d $(find epuck_driver_cpp)/config/single_epuck_driver_rviz.rviz"/>-->
 
     <node pkg="gmapping" type="slam_gmapping" name="slam_gmapping" output="screen" >
         <param name="base_frame" value="$(arg epuck_name)/base_link"/>
@@ -151,5 +133,19 @@
         <param name="transform_publish_period" value="0.05"/> <!-- default = 0.05 -->
                     
     </node>
+
+	<node type="raspicam_node" pkg="raspicam_node" name="raspicam_node" output="screen">
+		<param name="camera_info_url" value="package://raspicam_node/camera_info/camerav1_1280x720.yaml"/>
+		<param name="camera_name" value="camerav1_1280x720"/>
+		<param name="width" value="640"/>
+		<param name="height" value="480"/>
+		<!-- We are running at 90fps to reduce motion blur -->
+		<param name="framerate" value="90"/>
+		<param name="hFlip" value="true"/>
+		<param name="vFlip" value="true"/>
+		<param name="ISO" value="500"/>
+
+		<param name="camera_frame_id" value="raspicam"/> 
+	</node>
 
 </launch>

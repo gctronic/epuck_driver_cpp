@@ -1,0 +1,38 @@
+<launch>
+
+    <arg name="epuck_name" default="epuck_robot_0"/>
+    <arg name="xpos" default="0.0"/>
+    <arg name="ypos" default="0.0"/>
+    <arg name="theta" default="0.0"/>
+    <!-- Sensor enabling/disabling:-->
+    <arg name="imu_en" default="true"/>
+    <arg name="prox_en" default="true"/>
+    <arg name="mot_pos_en" default="true"/>
+    <arg name="floor_en" default="false"/>
+    <arg name="mot_speed_en" default="false"/>
+    <arg name="mic_en" default="true"/> 
+    <arg name="ros_rate" default="20" />
+	<arg name="debug_en" default="false"/>
+    
+    <node pkg="epuck_driver_cpp" type="epuck_driver_cpp" name="$(arg epuck_name)" output="screen">
+        <param name="epuck_name" value="$(arg epuck_name)"/>
+        <param name="xpos" value="$(arg xpos)"/>
+		<param name="ypos" value="$(arg ypos)"/>
+		<param name="theta" value="$(arg theta)"/> 
+        <param name="imu" value="$(arg imu_en)"/>
+        <param name="proximity" value="$(arg prox_en)"/>
+        <param name="motor_position" value="$(arg mot_pos_en)"/>
+        <param name="floor" value="$(arg floor_en)"/>
+        <param name="motor_speed" value="$(arg mot_speed_en)"/>
+		<param name="microphone" value="$(arg mic_en)"/> 
+        <param name="ros_rate" value="$(arg ros_rate)"/>
+		<param name="debug" value="$(arg debug_en)"/>
+    </node>
+    
+    <param name="robot_description" textfile="$(find epuck_driver_cpp)/urdf/epuck_urdf.xml"/>
+    <node name="epuck_state_publisher" pkg="robot_state_publisher" type="state_publisher">
+        <param name="tf_prefix" value="$(arg epuck_name)" />
+    </node>
+
+
+</launch>
