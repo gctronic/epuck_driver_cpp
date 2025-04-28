@@ -1,0 +1,287 @@
+#!/usr/bin/env python3
+
+# Run a simple socket server to test the e-puck driver
+# Usage: epuck_sim [-h] [--ip IP] [--port PORT]
+
+import argparse
+import socket
+import struct
+import time
+from dataclasses import dataclass
+
+ENDIAN_FMT = "<"
+
+EPUCK_SENSOR_PACKET_FMT_STR: str = (
+    ENDIAN_FMT + "BhhhfffhhhfffBHHHHHHHHHHHHHHHHHHHHHhhHBBBBBHHHHHHBB"
+)
+EPUCK_SENSOR_PACKET_ID: int = 0x2
+
+
+@dataclass
+class EpuckSensorPacket:
+    id: int = 0x2  # byte
+    imu_acc_x: int = 0  # short
+    imu_acc_y: int = 0  # short
+    imu_acc_z: int = 0  # short
+    imu_acceleration: float = 0
+    imu_orientation: float = 0
+    imu_inclination: float = 0
+    imu_gyro_x: int = 0  # short
+    imu_gyro_y: int = 0  # short
+    imu_gyro_z: int = 0  # short
+    imu_magnetometer_x: float = 0
+    imu_magnetometer_y: float = 0
+    imu_magnetometer_z: float = 0
+    imu_temp: int = 0  # byte
+    ir_proximity_0: int = 0  # unsigned short
+    ir_proximity_1: int = 0  # unsigned short
+    ir_proximity_2: int = 0  # unsigned short
+    ir_proximity_3: int = 0  # unsigned short
+    ir_proximity_4: int = 0  # unsigned short
+    ir_proximity_5: int = 0  # unsigned short
+    ir_proximity_6: int = 0  # unsigned short
+    ir_proximity_7: int = 0  # unsigned short
+    ir_ambient_0: int = 0  # unsigned short
+    ir_ambient_1: int = 0  # unsigned short
+    ir_ambient_2: int = 0  # unsigned short
+    ir_ambient_3: int = 0  # unsigned short
+    ir_ambient_4: int = 0  # unsigned short
+    ir_ambient_5: int = 0  # unsigned short
+    ir_ambient_6: int = 0  # unsigned short
+    ir_ambient_7: int = 0  # unsigned short
+    tof_distance: int = 0  # unsigned short
+    mic_0: int = 0  # unsigned short
+    mic_1: int = 0  # unsigned short
+    mic_2: int = 0  # unsigned short
+    mic_3: int = 0  # unsigned short
+    motor_left_steps: int = 0  # short
+    motor_right_steps: int = 0  # short
+    bat_adc_value: int = 0  # unsigned short
+    usd_state: int = 0  # byte
+    tv_remote_toggle: int = 0  # byte
+    tv_remote_addr: int = 0  # byte
+    tv_remote_data: int = 0  # byte
+    selector_position: int = 0  # byte
+    ground_sensor_proximity_0: int = 0  # unsigned short
+    ground_sensor_proximity_1: int = 0  # unsigned short
+    ground_sensor_proximity_2: int = 0  # unsigned short
+    ground_sensor_ambient_0: int = 0  # unsigned short
+    ground_sensor_ambient_1: int = 0  # unsigned short
+    ground_sensor_ambient_2: int = 0  # unsigned short
+    button_state: int = 0  # byte
+    reserved_empty: int = 0  # byte
+
+    def pack(self):
+        return struct.pack(
+            EPUCK_SENSOR_PACKET_FMT_STR,
+            self.id,
+            self.imu_acc_x,
+            self.imu_acc_y,
+            self.imu_acc_z,
+            self.imu_acceleration,
+            self.imu_orientation,
+            self.imu_inclination,
+            self.imu_gyro_x,
+            self.imu_gyro_y,
+            self.imu_gyro_z,
+            self.imu_magnetometer_x,
+            self.imu_magnetometer_y,
+            self.imu_magnetometer_z,
+            self.imu_temp,
+            self.ir_proximity_0,
+            self.ir_proximity_1,
+            self.ir_proximity_2,
+            self.ir_proximity_3,
+            self.ir_proximity_4,
+            self.ir_proximity_5,
+            self.ir_proximity_6,
+            self.ir_proximity_7,
+            self.ir_ambient_0,
+            self.ir_ambient_1,
+            self.ir_ambient_2,
+            self.ir_ambient_3,
+            self.ir_ambient_4,
+            self.ir_ambient_5,
+            self.ir_ambient_6,
+            self.ir_ambient_7,
+            self.tof_distance,
+            self.mic_0,
+            self.mic_1,
+            self.mic_2,
+            self.mic_3,
+            self.motor_left_steps,
+            self.motor_right_steps,
+            self.bat_adc_value,
+            self.usd_state,
+            self.tv_remote_toggle,
+            self.tv_remote_addr,
+            self.tv_remote_data,
+            self.selector_position,
+            self.ground_sensor_proximity_0,
+            self.ground_sensor_proximity_1,
+            self.ground_sensor_proximity_2,
+            self.ground_sensor_ambient_0,
+            self.ground_sensor_ambient_1,
+            self.ground_sensor_ambient_2,
+            self.button_state,
+            self.reserved_empty,
+        )
+
+    @classmethod
+    def unpack(cls, buffer: bytes):
+        if buffer[0] != EPUCK_SENSOR_PACKET_ID:
+            raise ValueError(
+                f"Invalid message id: {buffer[0]}, expected {EPUCK_SENSOR_PACKET_ID}"
+            )
+        args = struct.unpack(EPUCK_SENSOR_PACKET_FMT_STR, buffer)
+        return cls(*args)
+
+    @classmethod
+    def calcsize(cls):
+        return struct.calcsize(EPUCK_SENSOR_PACKET_FMT_STR)
+
+
+EPUCK_COMMAND_PACKET_FMT_STR: str = ENDIAN_FMT + "BBBhhBBBBBBBBBBBBBB"
+EPUCK_COMMAND_PACKET_ID: int = 0x80
+
+
+@dataclass
+class EpuckCommandPacket:
+    command: int = 0x80  # byte
+    request_flags: int = 0  # byte
+    settings_flags: int = 0  # byte
+    motors_left: int = 0  # short
+    motors_right: int = 0  # short
+    leds_state: int = 0  # byte
+    rgb_leds_led2_r: int = 0  # byte
+    rgb_leds_led2_g: int = 0  # byte
+    rgb_leds_led2_b: int = 0  # byte
+    rgb_leds_led4_r: int = 0  # byte
+    rgb_leds_led4_g: int = 0  # byte
+    rgb_leds_led4_b: int = 0  # byte
+    rgb_leds_led6_r: int = 0  # byte
+    rgb_leds_led6_g: int = 0  # byte
+    rgb_leds_led6_b: int = 0  # byte
+    rgb_leds_led8_r: int = 0  # byte
+    rgb_leds_led8_g: int = 0  # byte
+    rgb_leds_led8_b: int = 0  # byte
+    speaker_sound_id: int = 0  # byte
+
+    def pack(self):
+        return struct.pack(
+            EpuckCommandPacket.FMT_STR,
+            self.command,
+            self.request_flags,
+            self.settings_flags,
+            self.motors_left,
+            self.motors_right,
+            self.leds_state,
+            self.rgb_leds_led2_r,
+            self.rgb_leds_led2_g,
+            self.rgb_leds_led2_b,
+            self.rgb_leds_led4_r,
+            self.rgb_leds_led4_g,
+            self.rgb_leds_led4_b,
+            self.rgb_leds_led6_r,
+            self.rgb_leds_led6_g,
+            self.rgb_leds_led6_b,
+            self.rgb_leds_led8_r,
+            self.rgb_leds_led8_g,
+            self.rgb_leds_led8_b,
+            self.speaker_sound_id,
+        )
+
+    @classmethod
+    def unpack(cls, buffer: bytes):
+        if buffer[0] != EPUCK_COMMAND_PACKET_ID:
+            raise ValueError(
+                f"Invalid message id: {buffer[0]}, expected {EPUCK_COMMAND_PACKET_ID}"
+            )
+        args = struct.unpack(EPUCK_COMMAND_PACKET_FMT_STR, buffer)
+        # 0001 1001
+        return cls(*args)
+
+    @classmethod
+    def calcsize(cls):
+        return struct.calcsize(EPUCK_COMMAND_PACKET_FMT_STR)
+
+
+sock: socket.socket = None
+IMG_SIZE = 160 * 120 * 2
+SENSOR_SIZE = EpuckSensorPacket.calcsize()
+
+
+def initConnectionWithRobot(server_address):
+    # Create a TCP/IP socket
+    global sock
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+    # Bind the socket to the address and port
+    print("Starting up on {} port {}".format(*server_address))
+    sock.connect(("192.168.0.22", 1000))
+
+
+def closeConnection():
+    sock.close()
+
+
+def updateSensorsAndActuators():
+    camera_enabled = False
+
+    bytes_sent = 0
+    image = bytes([])
+    sensor = bytes([])
+
+    bytes_sent = 0
+    command = EpuckCommandPacket(request_flags=0b11 if camera_enabled else 0b10).pack()
+    while bytes_sent < EpuckCommandPacket.calcsize():
+        bytes_sent += sock.send(command[bytes_sent:], 0)
+
+    if camera_enabled:
+        expected_recv_packets = 2
+    else:
+        expected_recv_packets = 1
+
+    while expected_recv_packets > 0:
+        header = sock.recv(1, 0)
+
+        if header[0] == 0x01:  # Camera.
+            image = header + sock.recv(IMG_SIZE - 1, 0)
+
+        elif header[0] == 0x02:  # Sensors.
+            sensor = header + sock.recv(SENSOR_SIZE - 1, 0)
+
+        elif header[0] == 0x03:
+            print("empty packet")
+
+        else:
+            print("unexpected packet")
+
+        expected_recv_packets -= 1
+
+    return image, sensor
+
+
+def main(server_address):
+    # Create a TCP/IP socket
+    initConnectionWithRobot(server_address)
+
+    while True:
+        _, sensor = updateSensorsAndActuators()
+
+        epuck_sensors = EpuckSensorPacket.unpack(sensor)
+        print(epuck_sensors.imu_acceleration)
+
+        time.sleep(0.01)
+
+
+if __name__ == "__main__":
+    arg_parser = argparse.ArgumentParser(description="Test server for e-puck driver")
+    arg_parser.add_argument(
+        "--ip", type=str, default="192.168.0.2", help="IP address of this server"
+    )
+    arg_parser.add_argument(
+        "--port", type=int, default=10000, help="Port number of this server"
+    )
+    args = arg_parser.parse_args()
+    main((args.ip, args.port))

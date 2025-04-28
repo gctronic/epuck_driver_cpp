@@ -1,70 +1,423 @@
 <?xml version="1.0"?>
+<robot
+  name="epuck2"
+  xmlns="http://www.ros.org"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.ros.org https://raw.githubusercontent.com/ros/urdfdom/master/xsd/urdf.xsd"
+  xmlns:xacro="http://www.ros.org/wiki/xacro"
+>
 
-<robot name="epuck">
+  <!-- Base link -->
+  <link name="base_link">
+    <visual>
+      <origin xyz="0 0 0.022" rpy="3.141589 0 0" />
+      <geometry>
+        <cylinder radius="0.037" length="0.032" />
+      </geometry>
+      <material name="light_grey">
+        <color rgba="0.8 0.8 0.8 0.3" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.022" rpy="3.141589 0 0" />
+      <geometry>
+        <cylinder radius="0.037" length="0.040" />
+      </geometry>
+    </collision>
+    <visual>
+      <origin xyz="0 0 0.0051" rpy="0 0 0" />
+      <geometry>
+        <box size="0.05 0.04 0.01" />
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.0051" rpy="0 0 0" />
+      <geometry>
+        <box size="0.05 0.04 0.01" />
+      </geometry>
+    </collision>
+  </link>
 
-    <link name="base_link">
-        <visual>
-            <geometry>
-                <cylinder length="0.034" radius="0.035"/>
-            </geometry>
-            <origin xyz="0.0 0.0 0.02"/>
-            <material name="light_grey">
-                <color rgba="0.8 0.8 0.8 0.5"/>
-            </material>
-        </visual>
-    </link>
 
-    <link name="right_wheel">
-        <visual>
-            <geometry>
-                <cylinder length="0.002" radius="0.02"/>
-            </geometry>
-            <origin rpy="0 1.57075 0"/>
-            <material name="black">
-                <color rgba="0.0 0.0 0.0 1"/>
-            </material>
-        </visual>
-    </link>
+  <!-- Mass link (dummy) -->
+  <link name="mass_link">
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <mass value="0.13" />
+      <inertia ixx="9.78585e-05" iyy="8.64333e-05" izz="8.74869e-05" ixy="0" ixz="0" iyz="0" />
+    </inertial>
+  </link>
 
-    <joint name="base_to_right_wheel" type="fixed">
-        <parent link="base_link"/>
-        <child link="right_wheel"/>
-        <origin rpy="0 0 1.57075" xyz="0.0 -0.035 0.02"/>
-    </joint>
+  <joint name="base_link_mass_link" type="fixed">
+    <parent link="base_link" />
+    <child link="mass_link" />
+    <origin xyz="0 0 0.015" rpy="3.141589 0 0" />
+  </joint>
 
-    <link name="left_wheel">
-        <visual>
-            <geometry>
-                <cylinder length="0.002" radius="0.02"/>
-            </geometry>
-            <origin rpy="0 1.57075 0"/>
-            <material name="black">
-                <color rgba="0.0 0.0 0.0 1"/>
-            </material>
-        </visual>
-    </link>
 
-    <joint name="base_to_left_wheel" type="fixed">
-        <parent link="base_link"/>
-        <child link="left_wheel"/>
-        <origin rpy="0 0 1.57075" xyz="0.0 0.035 0.02"/>
-    </joint>
+  <!-- Body top -->
+  <link name="body_top">
+    <visual>
+      <geometry>
+        <cylinder length="0.002" radius="0.037" />
+      </geometry>
+      <material name="green_pcb">
+        <color rgba="0.23 0.4 0.16 1.0" />
+      </material>
+    </visual>
+  </link>
 
-    <link name="body_top">
-        <visual>
-            <geometry>
-                <cylinder length="0.002" radius="0.037"/>
-            </geometry>
-            <material name="green_pcb">
-                <color rgba="0.23 0.4 0.16 1.0"/>
-            </material>
-        </visual>
-    </link>
+  <joint name="base_link_body_top" type="fixed">
+    <parent link="base_link" />
+    <child link="body_top" />
+    <origin xyz="0.0 0.0 0.0373" />
+  </joint>
 
-    <joint name="base_to_body_top" type="fixed">
-        <parent link="base_link"/>
-        <child link="body_top"/>
-        <origin xyz="0.0 0.0 0.037"/>
-    </joint>
+
+  <!-- Body columns -->
+  <link name="body_columns">
+    <visual>
+      <origin xyz="0.0254 0.0193 0" rpy="0 0 0" />
+      <geometry>
+        <cylinder length="0.008" radius="0.00225" />
+      </geometry>
+      <material name="grey">
+        <color rgba="0.9 0.9 0.9 1.0" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="0.0254 -0.0193 0" rpy="0 0 0" />
+      <geometry>
+        <cylinder length="0.008" radius="0.00225" />
+      </geometry>
+      <material name="grey">
+        <color rgba="0.9 0.9 0.9 1.0" />
+      </material>
+    </visual>
+    <visual>
+      <origin xyz="-0.032 0 0.0" rpy="0 0 0" />
+      <geometry>
+        <cylinder length="0.008" radius="0.00225" />
+      </geometry>
+      <material name="grey">
+        <color rgba="0.9 0.9 0.9 1.0" />
+      </material>
+    </visual>
+  </link>
+
+  <joint name="body_top_body_columns" type="fixed">
+    <parent link="body_top" />
+    <child link="body_columns" />
+    <origin xyz="0.0 0.0 0.005" />
+  </joint>
+
+
+  <!-- Left wheel -->
+  <link name="left_wheel">
+    <inertial>
+      <origin xyz="0 0 0" rpy="1.570796 0 0" />
+      <mass value="0.005" />
+      <inertia ixx="0.0000005104166667" iyy="0.0000005104166667" izz="0.000001" ixy="0" ixz="0"
+        iyz="0" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="1.570796 0 0" />
+      <geometry>
+        <cylinder radius="0.02" length="0.005" />
+      </geometry>
+      <material name="black">
+        <color rgba="0.0 0.0 0.0 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="1.570796 0 0" />
+      <geometry>
+        <cylinder radius="0.02" length="0.005" />
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="base_link_left_wheel" type="continuous">
+    <parent link="base_link" />
+    <child link="left_wheel" />
+    <axis xyz="0 1 0" />
+    <limit effort="10" velocity="7.536" />
+    <origin xyz="0 0.026 0.02" rpy="0 0 0" />
+  </joint>
+
+
+  <!-- Right wheel -->
+  <link name="right_wheel">
+    <inertial>
+      <origin xyz="0 0 0" rpy="1.570796 0 0" />
+      <mass value="0.005" />
+      <inertia ixx="0.0000005104166667" iyy="0.0000005104166667" izz="0.000001" ixy="0" ixz="0"
+        iyz="0" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="1.570796 0 0" />
+      <geometry>
+        <cylinder radius="0.02" length="0.005" />
+      </geometry>
+      <material name="black">
+        <color rgba="0.0 0.0 0.0 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="1.570796 0 0" />
+      <geometry>
+        <cylinder radius="0.02" length="0.005" />
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="base_link_right_wheel" type="continuous">
+    <parent link="base_link" />
+    <child link="right_wheel" />
+    <axis xyz="0 1 0" />
+    <limit effort="10" velocity="7.536" />
+    <origin xyz="0 -0.026 0.02" rpy="0 0 0" />
+  </joint>
+
+
+  <!-- Proximity sensor 0 -->
+  <link name="prox0">
+  </link>
+  <joint name="base_link_prox0" type="fixed">
+    <parent link="base_link" />
+    <child link="prox0" />
+    <origin xyz="0.032255 -0.010752 0.033" rpy="1.570807 0 -0.3008" />
+  </joint>
+
+
+  <!-- Proximity sensor 1 -->
+  <link name="prox1">
+  </link>
+  <joint name="base_link_prox1" type="fixed">
+    <parent link="base_link" />
+    <child link="prox1" />
+    <origin xyz="0.022461 -0.025524 0.033" rpy="1.570806 0.000005 -0.8008" />
+  </joint>
+
+
+  <!-- Proximity sensor 2 -->
+  <link name="prox2">
+  </link>
+  <joint name="base_link_prox2" type="fixed">
+    <parent link="base_link" />
+    <child link="prox2" />
+    <origin xyz="0 -0.034 0.033" rpy="1.5708 0.00001 -1.5708" />
+  </joint>
+
+
+  <!-- Proximity sensor 3 -->
+  <link name="prox3">
+  </link>
+  <joint name="base_link_prox3" type="fixed">
+    <parent link="base_link" />
+    <child link="prox3" />
+    <origin xyz="-0.030411 -0.015205 0.033" rpy="1.570788 0.000007 -2.643986" />
+  </joint>
+
+
+  <!-- Proximity sensor 4 -->
+  <link name="prox4">
+  </link>
+  <joint name="base_link_prox4" type="fixed">
+    <parent link="base_link" />
+    <child link="prox4" />
+    <origin xyz="-0.030411 0.015205 0.033" rpy="1.570787 -0.000003 2.6392" />
+  </joint>
+
+
+  <!-- Proximity sensor 5 -->
+  <link name="prox5">
+  </link>
+  <joint name="base_link_prox5" type="fixed">
+    <parent link="base_link" />
+    <child link="prox5" />
+    <origin xyz="0 0.034 0.033" rpy="1.570793 -0.000011 1.57079" />
+  </joint>
+
+
+  <!-- Proximity sensor 6 -->
+  <link name="prox6">
+  </link>
+  <joint name="base_link_prox6" type="fixed">
+    <parent link="base_link" />
+    <child link="prox6" />
+    <origin xyz="0.022461 0.025524 0.033" rpy="1.570801 -0.00001 0.7992" />
+  </joint>
+
+
+  <!-- Proximity sensor 7 -->
+  <link name="prox7">
+  </link>
+  <joint name="base_link_prox7" type="fixed">
+    <parent link="base_link" />
+    <child link="prox7" />
+    <origin xyz="0.032255 0.010752 0.033" rpy="1.570806 -0.000007 0.2992" />
+  </joint>
+
+
+  <!-- Camera -->
+  <link name="camera">
+  </link>
+  <joint name="base_link_camera" type="fixed">
+    <parent link="base_link" />
+    <child link="camera" />
+    <origin xyz="0.034 0 0.028" rpy="0 0 0" />
+  </joint>
+
+
+  <!-- ToF -->
+  <link name="tof">
+  </link>
+  <joint name="base_link_tof" type="fixed">
+    <parent link="base_link" />
+    <child link="tof" />
+    <origin xyz="0.034 -0.0018 0.033" rpy="1.570807 -0.000004 -0.0008" />
+  </joint>
+
+
+  <!-- IMU -->
+  <link name="imu">
+  </link>
+  <joint name="base_link_imu" type="fixed">
+    <parent link="base_link" />
+    <child link="imu" />
+    <origin xyz="0 0 0" rpy="0 0 0" />
+  </joint>
+
+
+  <!-- Speaker -->
+  <link name="speaker">
+  </link>
+  <joint name="base_link_speaker" type="fixed">
+    <parent link="base_link" />
+    <child link="speaker" />
+    <origin xyz="0 0 0" rpy="0 0 0" />
+  </joint>
+
+
+  <!-- Emitter -->
+  <link name="emitter">
+  </link>
+  <joint name="base_link_emitter" type="fixed">
+    <parent link="base_link" />
+    <child link="emitter" />
+    <origin xyz="0 0 0" rpy="0 0 0" />
+  </joint>
+
+
+  <!-- Receiver -->
+  <link name="receiver">
+  </link>
+  <joint name="base_link_receiver" type="fixed">
+    <parent link="base_link" />
+    <child link="receiver" />
+    <origin xyz="0 0 0" rpy="0 0 0" />
+  </joint>
+
+
+  <!-- LED 0 -->
+  <link name="led0">
+  </link>
+  <joint name="body_top_led0" type="fixed">
+    <parent link="body_top" />
+    <child link="led0" />
+    <origin xyz="0.0337 0 0.001" rpy="0 0 0" />
+  </joint>
+
+
+  <!-- LED 1 -->
+  <link name="led1">
+  </link>
+  <joint name="body_top_led1" type="fixed">
+    <parent link="body_top" />
+    <child link="led1" />
+    <origin xyz="0.022 -0.025 0.001" rpy="0 0 -0.783185" />
+  </joint>
+
+
+  <!-- LED 2 -->
+  <link name="led2">
+  </link>
+  <joint name="body_top_led2" type="fixed">
+    <parent link="body_top" />
+    <child link="led2" />
+    <origin xyz="0 -0.0337 0.001" rpy="0 0 1.57" />
+  </joint>
+
+
+  <!-- LED 3 -->
+  <link name="led3">
+  </link>
+  <joint name="body_top_led3" type="fixed">
+    <parent link="body_top" />
+    <child link="led3" />
+    <origin xyz="-0.027 -0.0201 0.001" rpy="0 0 0.633185" />
+  </joint>
+
+
+  <!-- LED 4 -->
+  <link name="led4">
+  </link>
+  <joint name="body_top_led4" type="fixed">
+    <parent link="body_top" />
+    <child link="led4" />
+    <origin xyz="-0.033 0 0.001" rpy="0 0 0" />
+  </joint>
+
+
+  <!-- LED 5 -->
+  <link name="led5">
+  </link>
+  <joint name="body_top_led5" type="fixed">
+    <parent link="body_top" />
+    <child link="led5" />
+    <origin xyz="-0.027 0.0201 0.001" rpy="0 0 -0.633185" />
+  </joint>
+
+
+  <!-- LED 6 -->
+  <link name="led6">
+  </link>
+  <joint name="body_top_led6" type="fixed">
+    <parent link="body_top" />
+    <child link="led6" />
+    <origin xyz="0 0.0337 0.001" rpy="0 0 1.57" />
+  </joint>
+
+
+  <!-- LED 7 -->
+  <link name="led7">
+  </link>
+  <joint name="body_top_led7" type="fixed">
+    <parent link="body_top" />
+    <child link="led7" />
+    <origin xyz="0.022 0.025 0.001" rpy="0 0 0.783185" />
+  </joint>
+
+
+  <!-- LED 8 -->
+  <link name="led8">
+  </link>
+  <joint name="body_top_led8" type="fixed">
+    <parent link="body_top" />
+    <child link="led8" />
+    <origin xyz="0 0 0.001" rpy="0 0 -1.570786" />
+  </joint>
+
+
+  <!-- LED 9 -->
+  <link name="led9">
+  </link>
+  <joint name="base_link_led9" type="fixed">
+    <parent link="base_link" />
+    <child link="led9" />
+    <origin xyz="0.031 -0.0125 0.028" rpy="0 0 0" />
+  </joint>
+
 
 </robot>
